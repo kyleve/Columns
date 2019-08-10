@@ -9,23 +9,38 @@
 import UIKit
 
 
+struct ColumnProperties
+{
+    var columns : Int
+    var gutterWidth : CGFloat
+    
+    init(columns: Int, gutterWidth : CGFloat)
+    {
+        precondition(columns > 0)
+        precondition(gutterWidth >= 0)
+        
+        self.columns = columns
+        self.gutterWidth = gutterWidth
+    }
+}
+
 struct ColumnLayout
 {
     let all : [ColumnLayoutElement]
     let columns : [Column]
     let gutters : [Gutter]
     
-    init(totalWidth: CGFloat, columns columnsCount: Int, gutterWidth: CGFloat)
+    let properties : ColumnProperties
+    
+    init(totalWidth: CGFloat, properties : ColumnProperties)
     {
-        precondition(totalWidth > CGFloat(columnsCount))
-        precondition(columnsCount > 0)
-        precondition(gutterWidth >= 0)
+        self.properties = properties
         
-        let gutterCount : Int = columnsCount - 1
-        let totalGutterWidth = gutterWidth * CGFloat(gutterCount)
+        let gutterCount : Int = self.properties.columns - 1
+        let totalGutterWidth = self.properties.gutterWidth * CGFloat(gutterCount)
 
         let totalColumnWidth = totalWidth - totalGutterWidth
-        let columnWidth = totalColumnWidth / CGFloat(columnsCount)
+        let columnWidth = totalColumnWidth / CGFloat(self.properties.columns)
         
         // TODO: This doesn't take into account the fact that we need to iterate over each column and use
         // bubble roundint to figure out the actual widths.. but good enough for now.
@@ -36,9 +51,9 @@ struct ColumnLayout
         
         var offset : CGFloat = 0.0
         
-        for index in 0 ..< columnsCount
+        for index in 0 ..< self.properties.columns
         {
-            let isLastColumn = (index == columnsCount - 1)
+            let isLastColumn = (index == self.properties.columns - 1)
             
             let column = Column(
                 width: columnWidth,
@@ -53,12 +68,12 @@ struct ColumnLayout
             
             if isLastColumn == false {
                 let gutter = Gutter(
-                    width: gutterWidth,
+                    width: self.properties.gutterWidth,
                     offset: offset,
                     index: index
                 )
                 
-                offset += gutterWidth
+                offset += self.properties.gutterWidth
                 
                 all.append(gutter)
                 gutters.append(gutter)
@@ -95,13 +110,96 @@ struct Gutter : ColumnLayoutElement
     let index : Int
 }
 
-struct FourColumnLayout
+final class ColumnLayoutPosition
+{
+    var origin : CGFloat
+    var width : CGFloat
+    
+    let coordinateSpace : UICoordinateSpace
+    
+    init(origin: CGFloat = 0.0, width : CGFloat, coordinateSpace : UICoordinateSpace)
+    {
+        self.origin = origin
+        self.width = width
+        self.coordinateSpace = coordinateSpace
+    }
+}
+
+protocol ColumnLayoutPositionProvider : UIView
+{
+    var columnLayoutPosition : ColumnLayoutPosition { get }
+}
+
+extension UIView
+{
+    var columnLayoutPosition : ColumnLayoutPosition {
+        var view = self
+        
+        while true {
+            if let view = view as? ColumnLayoutPositionProvider {
+                return view.columnLayoutPosition
+            } else {
+                if let superview = view.superview {
+                    view = superview
+                } else {
+                    break
+                }
+            }
+        }
+        
+        return ColumnLayoutPosition(origin: 0.0, width: self.bounds.size.width, coordinateSpace: self)
+    }
+}
+
+final class ColumnLayoutProvider<Layout:SpecificColumnLayout>
+{
+    unowned var coordinateSpace : UICoordinateSpace
+    
+    var layout : Layout {
+        return Layout(totalWidth: <#T##CGFloat#>, gutterWidth: <#T##CGFloat#>)
+    }
+    
+    init(coordinateSpace : UICoordinateSpace)
+    {
+        self.coordinateSpace = coordinateSpace
+    }
+}
+
+protocol SpecificColumnLayout
+{
+    init(totalWidth: CGFloat, gutterWidth: CGFloat)
+}
+
+struct SingleColumnLayout : SpecificColumnLayout
 {
     let layout : ColumnLayout
+
+    let column1 : Column
     
     init(totalWidth: CGFloat, gutterWidth: CGFloat)
     {
-        self.layout = ColumnLayout(totalWidth: totalWidth, columns: 4, gutterWidth: gutterWidth)
+        self.layout = ColumnLayout(totalWidth: totalWidth, properties: ColumnProperties(columns: 1, gutterWidth: 0.0))
+        
+        self.column1 = self.layout.columns[0]
+    }
+}
+
+struct FourColumnLayout : FourColumnLayout
+{
+    let layout : ColumnLayout
+    
+    let column1 : Column
+    let column2 : Column
+    let column3 : Column
+    let column4 : Column
+    
+    let gutter1 : Gutter
+    let gutter2 : Gutter
+    let gutter3 : Gutter
+    
+    init(totalWidth: CGFloat, gutterWidth: CGFloat)
+    {
+        self.layout = ColumnLayout(totalWidth: totalWidth, properties: ColumnProperties(columns: 4, gutterWidth: gutterWidth))
         
         self.column1 = self.layout.columns[0]
         self.column2 = self.layout.columns[1]
@@ -112,13 +210,4 @@ struct FourColumnLayout
         self.gutter2 = self.layout.gutters[1]
         self.gutter3 = self.layout.gutters[2]
     }
-    
-    let column1 : Column
-    let column2 : Column
-    let column3 : Column
-    let column4 : Column
-    
-    let gutter1 : Gutter
-    let gutter2 : Gutter
-    let gutter3 : Gutter
 }
